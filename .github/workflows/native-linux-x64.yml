@@ -1,0 +1,60 @@
+name: Build native Linux x64 artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out pinned Bookshelf source
+        uses: actions/checkout@v4
+        with:
+          ref: c21c4134fdb710481ed69db05bf943b0acdbbf60
+
+      - name: Set up .NET 6 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.428
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: yarn
+
+      - name: Install pinned Yarn
+        run: npm install --global yarn@1.22.22
+
+      - name: Build self-contained Linux x64 backend and frontend
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+          READARRVERSION: 0.4.20.129
+          BUILD_SOURCEBRANCHNAME: hardcover
+        run: ./build.sh --backend --frontend -r linux-x64 -f net6.0
+
+      - name: Assemble native artifact
+        run: |
+          set -euo pipefail
+          mkdir -p artifact/Bookshelf
+          cp -a _output/net6.0/linux-x64/publish/. artifact/Bookshelf/
+          cp -a _output/UI artifact/Bookshelf/UI
+          cp LICENSE.md artifact/Bookshelf/
+          chmod +x artifact/Bookshelf/Readarr
+          tar -C artifact -czf bookshelf-hardcover-v0.4.20.129-linux-x64.tar.gz Bookshelf
+          sha256sum bookshelf-hardcover-v0.4.20.129-linux-x64.tar.gz > bookshelf-hardcover-v0.4.20.129-linux-x64.tar.gz.sha256
+          test -x artifact/Bookshelf/Readarr
+          test -d artifact/Bookshelf/UI
+
+      - name: Upload verified artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bookshelf-hardcover-v0.4.20.129-linux-x64
+          path: |
+            bookshelf-hardcover-v0.4.20.129-linux-x64.tar.gz
+            bookshelf-hardcover-v0.4.20.129-linux-x64.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
